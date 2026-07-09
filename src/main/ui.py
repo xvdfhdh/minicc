@@ -1,5 +1,5 @@
 from __future__ import annotations
-from main.session import *
+from src.main.session import *
 import asyncio
 import os
 import sys

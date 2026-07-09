@@ -1,3 +1,3 @@
-from main._main_ import main
+from src.main._main_ import main
 
 main()

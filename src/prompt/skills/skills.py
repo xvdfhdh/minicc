@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import re
-from memory.frontmatter import parse_frontmatter
+from src.memory.frontmatter import parse_frontmatter
 
 
 @dataclass

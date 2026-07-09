@@ -105,10 +105,10 @@ def get_git_context() -> str:
 
 # 构建完整的系统提示词，替换所有 {{占位符}}
 def build_system_prompt() -> str:
-    from memory.memory import build_memory_prompt_section
-    from prompt.skills.skills import build_skill_description
+    from src.memory.memory import build_memory_prompt_section
+    from src.prompt.skills.skills import build_skill_description
     try:
-        from main.subagent import build_agent_descriptions
+        from src.main.subagent import build_agent_descriptions
     except ImportError:
         build_agent_descriptions = lambda: ""
     from datetime import date

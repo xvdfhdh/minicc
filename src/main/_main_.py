@@ -1,8 +1,8 @@
 import argparse
 import os
 import sys
-from main.agent import *
-from main.ui import *
+from src.main.agent import *
+from src.main.ui import *
 import signal
 import asyncio
 from pathlib import Path

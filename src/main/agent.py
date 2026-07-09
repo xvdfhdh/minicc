@@ -1,9 +1,9 @@
 from __future__ import annotations
 from anthropic import AsyncAnthropic
 from openai import OpenAI
-from tools.tools import *
-from main.ui import *
-from prompt.prompt import build_system_prompt
+from src.tools.tools import *
+from src.main.ui import *
+from src.prompt.prompt import build_system_prompt
 import asyncio
 import time
 import json
@@ -11,7 +11,7 @@ import uuid
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from memory.memory import *
+from src.memory.memory import *
 
 # 将内部工具定义转换为 OpenAI function calling 格式
 def _to_openai_tools(tools: list[ToolDef]) -> list[dict]:
@@ -247,7 +247,7 @@ class Agent:
         返回 async callable (system_prompt, user_query, signal) -> str，
         或 None（当记忆文件不存在时跳过预取）。
         """
-        from memory.memory import get_memory_dir
+        from src.memory.memory import get_memory_dir
         if not any(get_memory_dir().iterdir()):
             return None
 
