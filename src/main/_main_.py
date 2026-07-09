@@ -1,3 +1,4 @@
+from __future__ import annotations
 import argparse
 import os
 import sys
@@ -8,23 +9,27 @@ import asyncio
 from pathlib import Path
 
 
-# 从项目根目录 .env 文件加载环境变量
+# 从多个位置按优先级加载 .env 文件：当前目录 > 用户 ~/.minicc/ > 项目根
 def _load_dotenv() -> None:
-    env_path = Path(__file__).resolve().parents[2] / ".env"
-    if not env_path.is_file():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    candidates = [
+        Path.cwd() / ".env",
+        Path.home() / ".minicc" / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
+    ]
+    for env_path in candidates:
+        if not env_path.is_file():
             continue
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip()
-        # 去除行内注释
-        if " #" in value:
-            value = value.split(" #")[0].strip()
-        value = value.strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if " #" in value:
+                value = value.split(" #")[0].strip()
+            value = value.strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 
 # 解析命令行参数

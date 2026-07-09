@@ -1,8 +1,9 @@
 """
 交互式配置向导：首次启动时引导用户配置 API Key / URL / Model，
-写入项目根目录的 .env 文件永久保存。
+写入用户全局目录 ~/.minicc/.env 永久保存，所有目录下均可复用。
 """
 from __future__ import annotations
+import sys
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
@@ -10,6 +11,65 @@ from rich.prompt import Prompt, Confirm
 from rich.text import Text
 
 console = Console()
+
+
+def _masked_input(prompt_text: str) -> str:
+    """带 * 遮罩的密码输入，支持退格删除"""
+    sys.stdout.write(prompt_text)
+    sys.stdout.flush()
+    chars: list[str] = []
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            while True:
+                ch = msvcrt.getwch()
+                if ch in ("\r", "\n"):
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    break
+                elif ch in ("\x08", "\x7f"):  # Backspace
+                    if chars:
+                        chars.pop()
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                elif ch == "\x03":  # Ctrl+C
+                    raise KeyboardInterrupt
+                else:
+                    chars.append(ch)
+                    sys.stdout.write("*")
+                    sys.stdout.flush()
+        else:
+            import termios
+            import tty
+            fd = sys.stdin.fileno()
+            old = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while True:
+                    ch = sys.stdin.read(1)
+                    if ch in ("\r", "\n"):
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        break
+                    elif ch in ("\x08", "\x7f"):
+                        if chars:
+                            chars.pop()
+                            sys.stdout.write("\b \b")
+                            sys.stdout.flush()
+                    elif ch == "\x03":
+                        raise KeyboardInterrupt
+                    else:
+                        chars.append(ch)
+                        sys.stdout.write("*")
+                        sys.stdout.flush()
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except KeyboardInterrupt:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        return ""
+
+    return "".join(chars)
 
 # ── 预设的 API 提供商模板 ──
 PROVIDERS = [
@@ -29,11 +89,10 @@ PROVIDERS = [
     },
 ]
 
-ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
-
 
 def _get_dotenv_path() -> Path:
-    return ENV_PATH
+    """保存到用户全局目录 ~/.minicc/.env，所有目录复用"""
+    return Path.home() / ".minicc" / ".env"
 
 
 def run_config_wizard() -> bool:
@@ -67,7 +126,7 @@ def run_config_wizard() -> bool:
         console.print(f"[bold]API Key[/bold] [dim](for {provider['name']})[/dim]")
     else:
         console.print("[bold]API Key[/bold]")
-    api_key = Prompt.ask("  API Key", password=True).strip()
+    api_key = _masked_input("  API Key: ").strip()
     if not api_key:
         console.print("  [red]API Key cannot be empty. Setup cancelled.[/red]")
         return False
@@ -100,7 +159,7 @@ def run_config_wizard() -> bool:
     if provider:
         summary.append(f"\n  Provider:   {provider['name']}", style="dim")
     summary.append("\n  Save to:    ", style="dim")
-    summary.append(str(ENV_PATH))
+    summary.append(str(_get_dotenv_path()))
 
     console.print(Panel(summary, title="Configuration Summary", border_style="yellow"))
 
@@ -118,13 +177,14 @@ def run_config_wizard() -> bool:
 
 def _write_env(api_key: str, base_url: str, model: str, provider: dict | None) -> None:
     """将配置写入 .env 文件"""
-    ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    env_path = _get_dotenv_path()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
 
     # 读取现有 .env（如果存在），保留不相关的行
     existing_lines: list[str] = []
     existing_keys: set[str] = set()
-    if ENV_PATH.exists():
-        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 existing_lines.append(line)
@@ -167,4 +227,4 @@ def _write_env(api_key: str, base_url: str, model: str, provider: dict | None) -
         for line in reversed(existing_lines):
             new_lines.insert(0, line)
 
-    ENV_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
