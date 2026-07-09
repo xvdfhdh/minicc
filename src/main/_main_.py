@@ -81,15 +81,11 @@ async def plan_approval(plan_content: str) -> dict:
 
 
 
-# 程序入口：解析参数 → 初始化 Agent → 单次对话或进入 REPL
-def main() -> None:
-    _load_dotenv()
-    args = parse_args()
-    permission_mode = _resolve_permission_mode(args)
-    model = args.model or os.environ.get("MINI_CLAUDE_MODEL", "claude-opus-4-6")
-
+def _resolve_api_config(args: argparse.Namespace) -> tuple[str, bool]:
+    """解析 API 配置：key + use_openai，如果缺失则启动配置向导"""
     resolved_api_key: str | None = None
     resolved_use_openai = bool(args.api_base)
+
     if os.environ.get("OPENAI_API_KEY") and os.environ.get("OPENAI_BASE_URL"):
         resolved_api_key = os.environ["OPENAI_API_KEY"]
         resolved_use_openai = True
@@ -99,9 +95,30 @@ def main() -> None:
         resolved_api_key = os.environ["OPENAI_API_KEY"]
         resolved_use_openai = True
 
-    if not resolved_api_key:
-        print_error("API key is required.")
+    if resolved_api_key:
+        return resolved_api_key, resolved_use_openai
+
+    # 无 API Key → 启动配置向导
+    from src.main.config_wizard import run_config_wizard
+    print_info("No API key configured. Starting setup wizard...")
+    success = run_config_wizard()
+    if not success:
+        print_error("Setup cancelled. API key is required to continue.")
         sys.exit(1)
+
+    # 重新加载 .env 获取刚写入的配置
+    _load_dotenv()
+    return _resolve_api_config(args)
+
+
+# 程序入口：解析参数 → 初始化 Agent → 单次对话或进入 REPL
+def main() -> None:
+    _load_dotenv()
+    args = parse_args()
+    permission_mode = _resolve_permission_mode(args)
+    model = args.model or os.environ.get("MINI_CLAUDE_MODEL", "deepseek-chat")
+
+    resolved_api_key, resolved_use_openai = _resolve_api_config(args)
 
     agent = Agent(permission_mode=permission_mode, model=model, thinking=args.thinking,
                   max_cost_usd=args.max_cost, max_turns=args.max_turns, api_key=resolved_api_key, use_openai=resolved_use_openai)
