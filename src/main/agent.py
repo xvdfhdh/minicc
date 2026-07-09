@@ -816,6 +816,26 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
         else:
             self._anthropic_messages = []
 
+    def clear_history(self) -> None:
+        """公开接口：清空会话历史"""
+        self._clear_history_keep_system()
+        print_info("Conversation cleared.")
+
+    def show_cost(self) -> None:
+        """公开接口：显示 token 用量和费用估算"""
+        print_cost(self.total_input_tokens, self.total_output_tokens)
+        # 粗略费用估算（按通用定价：输入 $0.15/M, 输出 $0.60/M）
+        in_cost = self.total_input_tokens / 1_000_000 * 0.15
+        out_cost = self.total_output_tokens / 1_000_000 * 0.60
+        total = in_cost + out_cost
+        print_info(f"Estimated cost: ${total:.4f} USD")
+
+    async def compact(self) -> None:
+        """公开接口：压缩会话上下文"""
+        print_info("Compacting conversation...")
+        await self._compact_conversation()
+        print_info("Compaction complete.")
+
     # 从保存的会话数据恢复消息历史
     def restore_session(self, data: dict) -> None:
         if data.get("anthropicMessages"):

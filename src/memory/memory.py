@@ -6,6 +6,8 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Callable, Awaitable
+from dataclasses import dataclass
+from src.memory.frontmatter import parse_frontmatter
 
 MAX_MEMORY_BYTES_PER_FILE = 4096
 MAX_SESSION_MEMORY_BYTES = 20000
@@ -216,3 +218,97 @@ def memory_freshness_warning(mtime_ms: float) -> str:
         f"not live state — claims about code behavior may be outdated. "
         f"Verify against current code before asserting as fact."
     )
+
+
+# ── 记忆文件操作辅助函数 ──
+
+@dataclass
+class MemoryEntry:
+    """记忆条目模型"""
+    type: str
+    name: str
+    description: str
+    filename: str
+    filePath: str = ""
+    mtimeMs: float = 0.0
+
+
+def _slugify(name: str) -> str:
+    """将名称转为安全的文件名"""
+    s = name.lower().strip()
+    s = re.sub(r"[^\w\u4e00-\u9fff]+", "_", s)
+    return s.strip("_") or "memory"
+
+
+def format_frontmatter(meta: dict[str, str], body: str) -> str:
+    """构建 YAML frontmatter 格式的内容"""
+    lines = ["---"]
+    for k, v in meta.items():
+        lines.append(f"{k}: {v}")
+    lines.append("---")
+    lines.append("")
+    lines.append(body)
+    return "\n".join(lines)
+
+
+def list_memories() -> list[MemoryEntry]:
+    """列出所有已保存的记忆"""
+    dir_path = get_memory_dir()
+    memories: list[MemoryEntry] = []
+    for f in dir_path.iterdir():
+        if not f.is_file() or not f.name.endswith(".md") or f.name == "MEMORY.md":
+            continue
+        try:
+            content = f.read_text(encoding="utf-8")
+            parsed = parse_frontmatter(content)
+            mtime = f.stat().st_mtime * 1000
+            memories.append(MemoryEntry(
+                type=parsed.meta.get("type", "unknown"),
+                name=parsed.meta.get("name", f.stem),
+                description=parsed.meta.get("description", ""),
+                filename=f.name,
+                filePath=str(f),
+                mtimeMs=mtime,
+            ))
+        except Exception:
+            continue
+    return memories
+
+
+def scan_memory_headers() -> list[dict]:
+    """扫描所有记忆文件的头部信息"""
+    memories = list_memories()
+    return [
+        {
+            "filename": m.filename,
+            "filePath": m.filePath,
+            "name": m.name,
+            "type": m.type,
+            "description": m.description,
+            "mtimeMs": m.mtimeMs,
+        }
+        for m in memories
+    ]
+
+
+def format_memory_manifest(headers: list[dict]) -> str:
+    """格式化记忆清单供 LLM 选择"""
+    lines = []
+    for h in headers:
+        lines.append(f"- [{h['filename']}] ({h['type']}) {h['name']}: {h['description']}")
+    return "\n".join(lines)
+
+
+def memory_age(mtime_ms: float) -> str:
+    """人类可读的年龄描述"""
+    seconds = max(0, int((time.time() * 1000 - mtime_ms) / 1000))
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"

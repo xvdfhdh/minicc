@@ -33,3 +33,14 @@ def list_sessions() -> list[dict]:
         except Exception:
             pass  # 跳过损坏的文件
     return sessions
+
+
+# 加载指定 ID 的会话数据
+def load_session(session_id: str) -> dict | None:
+    path = SESSION_DIR / f"{session_id}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None

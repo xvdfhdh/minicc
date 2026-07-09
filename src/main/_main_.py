@@ -165,6 +165,7 @@ async def run_repl(agent: Agent) -> None:
             print_user_prompt()
 
     signal.signal(signal.SIGINT, handle_sigint)
+    os.system("cls" if os.name == "nt" else "clear")
     print_welcome()
 
     while True:
@@ -209,6 +210,10 @@ async def run_repl(agent: Agent) -> None:
                 print_info(f"{len(memories)} memories:")
                 for m in memories:
                     print(f"    [{m.type}] {m.name} — {m.description}")
+            continue
+
+        if inp == "/help":
+            print_help()
             continue
 
                 # 用户自定义技能调用：/skill-name args

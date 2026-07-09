@@ -6,6 +6,8 @@ import sys
 import json
 from pathlib import Path
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 console = Console()
 
 
@@ -18,7 +20,60 @@ def print_info(msg: str) -> None:
     console.print(f"[cyan]  ● {msg}[/cyan]")
 
 def print_welcome() -> None:
-    console.print("\n[bold cyan]Mini Claude Code[/bold cyan] — type [dim]/help[/dim] for commands\n")
+    """打印带可爱白兔 ASCII art 的欢迎界面"""
+    console.print()
+
+    # 可爱白兔 ASCII art（用 Text 对象避免 Rich markup 转义反斜杠）
+    rabbit = Text("""    /)  /)
+   (˶• •˶)
+   (  🥕 )
+    "" ""\n""", style="bold white")
+
+    title = Text("Mini Claude Code ", style="bold cyan")
+    title.append("v0.1.0", style="dim")
+
+    header = Text.assemble(rabbit, title)
+    console.print(Panel(header, border_style="cyan", width=48))
+
+    # 命令速查
+    tips = _build_help_text()
+    console.print(Panel(tips, title="Commands", border_style="cyan", width=48))
+    console.print()
+
+
+def print_help() -> None:
+    """打印完整帮助信息"""
+    console.print()
+    tips = _build_help_text()
+    tips.append("\nType your question to start chatting with the AI.", style="dim")
+    console.print(Panel(tips, title="[bold]Help[/bold]", border_style="cyan", width=52))
+    console.print()
+
+
+def _build_help_text() -> Text:
+    """构建命令帮助文本，供欢迎界面和 /help 共用"""
+    tips = Text()
+    tips.append("/help", style="bold yellow")
+    tips.append("     Show this help\n", style="dim")
+    tips.append("/clear", style="bold yellow")
+    tips.append("    Clear conversation history\n", style="dim")
+    tips.append("/cost", style="bold yellow")
+    tips.append("     Show token usage & estimated cost\n", style="dim")
+    tips.append("/compact", style="bold yellow")
+    tips.append("  Compress conversation context\n", style="dim")
+    tips.append("/plan", style="bold yellow")
+    tips.append("     Toggle plan mode (read-only planning)\n", style="dim")
+    tips.append("/memory", style="bold yellow")
+    tips.append("   View saved memories\n", style="dim")
+    tips.append("\nType ", style="dim")
+    tips.append("exit", style="bold yellow")
+    tips.append(" or ", style="dim")
+    tips.append("quit", style="bold yellow")
+    tips.append(" to leave, ", style="dim")
+    tips.append("Ctrl+C", style="bold yellow")
+    tips.append(" to interrupt", style="dim")
+    return tips
+
 
 def print_user_prompt() -> None:
     console.print("[bold green]>[/bold green] ", end="")

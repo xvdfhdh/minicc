@@ -465,7 +465,7 @@ def _edit_file(inp: dict) -> str:
             return f"Error: old_string found {count} times in {inp['file_path']}. Must be unique."
 
         new_content = content.replace(actual, inp["new_string"], 1)
-        path.write_text(new_content)
+        path.write_text(new_content, encoding="utf-8")
 
         diff = _generate_diff(content, actual, inp["new_string"])
         quote_note = " (match via quote normalization)" if actual != inp["old_string"] else ""
@@ -518,7 +518,7 @@ def _write_file(inp: dict) -> str:
     try:
         path = Path(inp["file_path"])
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(inp["content"])
+        path.write_text(inp["content"], encoding="utf-8")
         lines = inp["content"].split("\n")
         line_count = len(lines)
         preview = "\n".join(f"{i+1:4d} | {l}" for i, l in enumerate(lines[:30]))
@@ -572,6 +572,24 @@ def _run_shell(inp: dict) -> str:
 
 
 # HTTP GET 获取 URL 内容，HTML 页面会去标签
+def _detect_encoding(content: bytes, content_type: str) -> str:
+    """从 Content-Type 和 HTML meta 标签中检测编码，回退到 UTF-8"""
+    # 1. 从 Content-Type header 中提取 charset
+    match = re.search(rb'charset\s*=\s*([^\s;]+)', content_type.encode("ascii", errors="ignore"))
+    if match:
+        return match.group(1).decode("ascii").strip('"\' ')
+
+    # 2. 从 HTML <meta charset> 中提取（前 2048 字节足够）
+    head = content[:2048]
+    # <meta charset="utf-8"> 或 <meta ... ;charset=utf-8>
+    match = re.search(rb'<meta[^>]*charset\s*=\s*["\']?([^"\';>\s]+)', head, re.IGNORECASE)
+    if match:
+        return match.group(1).decode("ascii").strip('"\' ')
+
+    # 3. 回退到 UTF-8
+    return "utf-8"
+
+
 def web_fetch(input: dict) -> str:
     url = input["url"]
     max_length = input.get("max_length") or 50000
@@ -585,9 +603,15 @@ def web_fetch(input: dict) -> str:
             result = f"HTTP error: {res.status_code} {res.reason}"
             return result
 
-        text = res.text
+        # 自动检测编码，避免中文网页乱码
         content_type = res.headers.get("Content-Type", "")
-        if "html" in content_type:
+        encoding = _detect_encoding(res.content, content_type)
+        try:
+            text = res.content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            text = res.content.decode("utf-8", errors="replace")
+
+        if "html" in content_type or b"<html" in res.content[:512].lower() or b"<!doctype" in res.content[:512].lower():
             text = re.sub(r"<script[\s\S]*?</script>", "", text, flags=re.IGNORECASE)
             text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.IGNORECASE)
             text = re.sub(r"<[^>]*>", " ", text)
