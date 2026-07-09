@@ -5,7 +5,41 @@ import os
 import sys
 import json
 from pathlib import Path
-import rich.console as console
+from rich.console import Console
+console = Console()
+
+
+# ── 通用输出函数 ──
+
+def print_error(msg: str) -> None:
+    console.print(f"\n[red]Error:[/red] {msg}")
+
+def print_info(msg: str) -> None:
+    console.print(f"[cyan]  ● {msg}[/cyan]")
+
+def print_welcome() -> None:
+    console.print("\n[bold cyan]Mini Claude Code[/bold cyan] — type [dim]/help[/dim] for commands\n")
+
+def print_user_prompt() -> None:
+    console.print("[bold green]>[/bold green] ", end="")
+
+def print_assistant_text(text: str) -> None:
+    console.print(text, end="")
+
+def print_cost(input_tokens: int, output_tokens: int) -> None:
+    console.print(f"[dim]  (in: {input_tokens}, out: {output_tokens})[/dim]")
+
+def print_divider() -> None:
+    console.print("[dim]" + "─" * 50 + "[/dim]")
+
+def print_confirmation(command: str) -> None:
+    console.print(f"\n  [yellow]⚠ Danger:[/yellow] [white]{command[:80]}[/white]")
+
+def print_retry(attempt: int, max_retries: int, reason: str) -> None:
+    console.print(f"  [yellow]Retry {attempt}/{max_retries}:[/yellow] {reason}")
+
+def stop_spinner() -> None:
+    pass  # 终端模式无 spinner
 
 
 # ── 工具图标映射 ──

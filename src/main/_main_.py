@@ -2,8 +2,29 @@ import argparse
 import os
 import sys
 from main.agent import *
+from main.ui import *
 import signal
 import asyncio
+from pathlib import Path
+
+
+# 从项目根目录 .env 文件加载环境变量
+def _load_dotenv() -> None:
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        # 去除行内注释
+        if " #" in value:
+            value = value.split(" #")[0].strip()
+        value = value.strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 # 解析命令行参数
@@ -11,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="mini-claude", add_help=False)
     parser.add_argument("prompt", nargs="*")
     parser.add_argument("--yolo", "-y", action="store_true")
+    parser.add_argument("--explore", action="store_true")
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--accept-edits", action="store_true")
     parser.add_argument("--dont-ask", action="store_true")
@@ -61,6 +83,7 @@ async def plan_approval(plan_content: str) -> dict:
 
 # 程序入口：解析参数 → 初始化 Agent → 单次对话或进入 REPL
 def main() -> None:
+    _load_dotenv()
     args = parse_args()
     permission_mode = _resolve_permission_mode(args)
     model = args.model or os.environ.get("MINI_CLAUDE_MODEL", "claude-opus-4-6")
@@ -126,9 +149,11 @@ async def run_repl(agent: Agent) -> None:
         print_user_prompt()
         try:
             line = input()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print("\n  Bye!  \n")
             break
+        except KeyboardInterrupt:
+            continue  # 信号处理器已打印提示
 
         inp = line.strip()
         sigint_count = 0

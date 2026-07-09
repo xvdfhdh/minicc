@@ -105,9 +105,12 @@ def get_git_context() -> str:
 
 # 构建完整的系统提示词，替换所有 {{占位符}}
 def build_system_prompt() -> str:
-    from .memory import build_memory_prompt_section
-    from .skills import build_skill_descriptions
-    from .subagent import build_agent_descriptions
+    from memory.memory import build_memory_prompt_section
+    from prompt.skills.skills import build_skill_description
+    try:
+        from main.subagent import build_agent_descriptions
+    except ImportError:
+        build_agent_descriptions = lambda: ""
     from datetime import date
 
     replacements = {
@@ -118,7 +121,7 @@ def build_system_prompt() -> str:
         "{{git_context}}": get_git_context(),
         "{{claude_md}}": load_claude_md(),
         "{{memory}}": build_memory_prompt_section(),
-        "{{skills}}": build_skill_descriptions(),
+        "{{skills}}": build_skill_description(),
         "{{agents}}": build_agent_descriptions(),
     }
     result = SYSTEM_PROMPT_TEMPLATE

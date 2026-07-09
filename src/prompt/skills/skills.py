@@ -25,6 +25,16 @@ class SkillDefinition:
 _cached_skills: list[SkillDefinition] | None = None
 
 
+def _load_skills_from_dir(dir_path: Path, source: str, skills: dict[str, SkillDefinition]) -> None:
+    """从目录加载技能定义文件（.md with YAML frontmatter）"""
+    if not dir_path.is_dir():
+        return
+    for f in sorted(dir_path.glob("*.md")):
+        parsed = _parse_skill_file(f, source, str(dir_path))
+        if parsed:
+            skills[parsed.name] = parsed
+
+
 
 def discover_skills()->list[SkillDefinition]:
     global _cached_skills

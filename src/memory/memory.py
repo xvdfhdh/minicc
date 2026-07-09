@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import os
 import re
@@ -8,6 +9,16 @@ from typing import Any, Callable, Awaitable
 
 MAX_MEMORY_BYTES_PER_FILE = 4096
 MAX_SESSION_MEMORY_BYTES = 20000
+MEMORY_DIR = Path.home() / ".minicc" / "memory"
+
+
+def get_memory_dir() -> Path:
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    return MEMORY_DIR
+
+
+def _get_index_path() -> Path:
+    return MEMORY_DIR / "MEMORY.md"
 SELECT_MEMORIES_PROMPT = """You are selecting memories that will be useful to an AI coding assistant as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
 
 Return a JSON object with a "selected_memories" array of filenames for the memories that will clearly be useful (up to 5). Only include memories that you are certain will be helpful based on their name and description.

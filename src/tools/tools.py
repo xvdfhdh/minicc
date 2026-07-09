@@ -15,6 +15,12 @@ from typing import Any, Optional, TypedDict
 # 支持并发执行（无需等待结果即可启动下一个）的工具集合
 CONCURRENCY_SAFE_TOOLS = {"read_file", "list_files", "grep_search", "web_fetch"}
 
+# 只读工具集合（无需确认）
+READ_TOOLS = {"read_file", "list_files", "grep_search", "web_fetch", "tool_search"}
+
+# 编辑工具集合（可能触发确认/拒绝）
+EDIT_TOOLS = {"write_file", "edit_file"}
+
 MAX_RESULT_CHARS = 50000
 
 # 危险命令匹配模式（用于触发确认）
@@ -234,6 +240,16 @@ def _parse_rule(rule: str) -> dict:
 _cached_rules: dict | None = None
 
 
+# 从 JSON 文件加载设置，不存在或解析失败返回 None
+def _load_settings(path: Path) -> dict | None:
+    try:
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 # 加载权限规则（从 ~/.minicc/settings.json 和 .minicc/settings.json）
 def load_permission_rules() -> dict:
     global _cached_rules
@@ -320,14 +336,6 @@ def check_permission(
 
     if tool_name in READ_TOOLS:
         return {"action": "allow"}
-
-    if tool_name in EDIT_TOOLS:
-        file_path = inp.get("file_path") or inp.get("path")
-        if plan_file_path and file_path == plan_file_path:
-            return {"action": "allow"}
-        return {"action": "deny", "message": f"Blocked in plan mode: {tool_name}"}
-    if tool_name == "run_shell":
-        return {"action": "deny", "message": "Shell commands blocked in plan mode"}
 
     if mode == "acceptEdits" and tool_name in EDIT_TOOLS:
         return {"action": "allow"}

@@ -1,7 +1,9 @@
 from __future__ import annotations
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from openai import OpenAI
 from tools.tools import *
+from main.ui import *
+from prompt.prompt import build_system_prompt
 import asyncio
 import time
 import json
@@ -90,6 +92,28 @@ class Agent:
         else:
             print_assistant_text(text)   
 
+    @staticmethod
+    def _block_to_dist(block) -> dict:
+        """将 Anthropic SDK 内容块对象转为普通 dict"""
+        if isinstance(block, dict):
+            return block
+        d = {"type": block.type}
+        if hasattr(block, "text"):
+            d["text"] = block.text
+        if hasattr(block, "name"):
+            d["name"] = block.name
+        if hasattr(block, "input"):
+            d["input"] = block.input
+        if hasattr(block, "id"):
+            d["id"] = block.id
+        if hasattr(block, "tool_use_id"):
+            d["tool_use_id"] = block.tool_use_id
+        if hasattr(block, "content"):
+            d["content"] = block.content
+        if hasattr(block, "is_error"):
+            d["is_error"] = block.is_error
+        return d
+
     async def run_once(self, prompt: str) -> dict:
         self._output_buffer = []
         prev_in = self.total_input_tokens
@@ -164,7 +188,12 @@ class Agent:
         self._system_prompt = self._base_system_prompt
 
         # --- API 客户端 ---
-        self._anthropic_client = Anthropic(api_key=api_key)
+        self._anthropic_client = AsyncAnthropic(
+            api_key=api_key,
+            base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
+            max_retries=2,
+            timeout=float(os.environ.get("ANTHROPIC_TIMEOUT", "180")),
+        )
         self._openai_client = OpenAI(
             api_key=api_key,
             base_url=os.environ.get("OPENAI_BASE_URL"),
@@ -212,6 +241,43 @@ class Agent:
 
         # --- 流控 ---
         self.last_api_call_time: float | None = None
+
+    def _build_side_query(self):
+        """构建记忆预取用的轻量级 side-query 函数。
+        返回 async callable (system_prompt, user_query, signal) -> str，
+        或 None（当记忆文件不存在时跳过预取）。
+        """
+        from memory.memory import get_memory_dir
+        if not any(get_memory_dir().iterdir()):
+            return None
+
+        async def _side_query(system_prompt: str, user_query: str, signal) -> str:
+            try:
+                if self.use_openai:
+                    resp = await asyncio.to_thread(
+                        self._openai_client.chat.completions.create,
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_query},
+                        ],
+                        max_tokens=512,
+                        temperature=0,
+                    )
+                    return resp.choices[0].message.content or ""
+                else:
+                    resp = await self._anthropic_client.messages.create(
+                        model=self.model,
+                        max_tokens=512,
+                        system=system_prompt,
+                        messages=[{"role": "user", "content": user_query}],
+                    )
+                    block = next((b for b in resp.content if b.type == "text"), None)
+                    return block.text if block else ""
+            except Exception:
+                return ""
+
+        return _side_query
 
     def set_plan_approval_fn(self, fn) -> None:
         self._plan_approval_fn = fn
@@ -363,6 +429,80 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
                         + f"\n\n[... budgeted: {len(block['content']) - keep * 2} chars truncated ...]\n\n"
                         + block["content"][-keep:]
                     )
+
+    def _snip_stale_results_anthropic(self) -> None:
+        """移除已被后续消息覆盖的旧工具结果（减少冗余 token）"""
+        utilization = self.last_input_token_count / self.effective_window if self.effective_window else 0
+        if utilization < 0.7:
+            return
+        # 收集所有当前有效的 tool_use id
+        alive_ids: set[str] = set()
+        for msg in self._anthropic_messages:
+            if msg.get("role") != "assistant" or not isinstance(msg.get("content"), list):
+                continue
+            for block in msg["content"]:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    alive_ids.add(block.get("id", ""))
+        # 移除不在 alive_ids 中的 tool_result
+        for msg in self._anthropic_messages:
+            if msg.get("role") != "user" or not isinstance(msg.get("content"), list):
+                continue
+            msg["content"] = [
+                b for b in msg["content"]
+                if not (isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id", "") not in alive_ids)
+            ]
+
+    def _budget_tool_results_openai(self) -> None:
+        """OpenAI 版工具结果截断"""
+        utilization = self.last_input_token_count / self.effective_window if self.effective_window else 0
+        if utilization < 0.5:
+            return
+        budget = 15000 if utilization > 0.7 else 30000
+        for msg in self._openai_messages:
+            if msg.get("role") == "tool" and isinstance(msg.get("content"), str) and len(msg["content"]) > budget:
+                keep = (budget - 80) // 2
+                msg["content"] = (
+                    msg["content"][:keep]
+                    + f"\n\n[... budgeted: {len(msg['content']) - keep * 2} chars truncated ...]\n\n"
+                    + msg["content"][-keep:]
+                )
+
+    def _snip_stale_results_openai(self) -> None:
+        """移除 OpenAI 消息中已过时的 tool 结果"""
+        utilization = self.last_input_token_count / self.effective_window if self.effective_window else 0
+        if utilization < 0.7:
+            return
+        alive_ids = set()
+        for msg in self._openai_messages:
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                alive_ids.update(tc["id"] for tc in msg["tool_calls"] if isinstance(tc, dict))
+        self._openai_messages = [
+            m for m in self._openai_messages
+            if not (m.get("role") == "tool" and m.get("tool_call_id", "") not in alive_ids)
+        ]
+
+    def _microcompact_openai(self) -> None:
+        """OpenAI 微型压缩：空闲时移除多余的 assistant 消息"""
+        if not self.last_api_call_time or (time.time() - self.last_api_call_time) < MICROCOMPACT_IDLE_S:
+            return
+        # 保留最后一条 assistant 消息（可能有 tool_calls），删除中间纯文本 assistant 消息
+        kept: list[dict] = []
+        last_assistant_idx = -1
+        for i, m in enumerate(self._openai_messages):
+            if m.get("role") == "assistant":
+                last_assistant_idx = i
+        for i, m in enumerate(self._openai_messages):
+            if m.get("role") == "assistant" and i != last_assistant_idx and not m.get("tool_calls"):
+                continue  # 删除过期的纯文本 assistant 消息
+            kept.append(m)
+        self._openai_messages = kept
+
+    async def _compact_conversation(self) -> None:
+        """根据后端路由到对应的压缩方法"""
+        if self.use_openai:
+            await self._compact_openai()
+        else:
+            await self._compact_anthropic()
 
     # 向用户确认危险操作（调用注入的 confirm_fn 或终端交互询问）
     async def _confirm_dangerous(self, command: str) -> bool:
@@ -664,6 +804,18 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
         except Exception:
             pass
 
+    def _get_message_count(self) -> int:
+        """返回当前会话消息数量（排除 system 消息）"""
+        msgs = self._openai_messages if self.use_openai else self._anthropic_messages
+        return sum(1 for m in msgs if m.get("role") != "system")
+
+    def _clear_history_keep_system(self) -> None:
+        """清空消息历史，保留 system prompt"""
+        if self.use_openai:
+            self._openai_messages = [m for m in self._openai_messages if m.get("role") == "system"]
+        else:
+            self._anthropic_messages = []
+
     # 从保存的会话数据恢复消息历史
     def restore_session(self, data: dict) -> None:
         if data.get("anthropicMessages"):
@@ -698,7 +850,7 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
             # 跟踪流式过程中的 tool_use 块（用于拼接 input_json）
             tool_blocks_by_index: dict[int, dict] = {}
 
-            async with self._anthropic_client().messages.stream(**create_params) as stream:
+            async with self._anthropic_client.messages.stream(**create_params) as stream:
                 async for event in stream:
                     if hasattr(event, 'type'):
                         if event.type == "content_block_start" and getattr(event, 'content_block', None):
@@ -733,7 +885,7 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
     # 流式调用 OpenAI API，拼装分片传输的 tool_calls 为统一响应格式
     async def _call_openai_stream(self) -> dict:
         async def _do():
-            stream = await self._openai_client.chat.completions.create(
+            stream = self._openai_client.chat.completions.create(
                 model=self.model,
                 max_tokens=16384,
                 tools=_to_openai_tools(self.tools),
@@ -748,7 +900,7 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
             finish_reason = ""
             usage = None
 
-            async for chunk in stream:
+            for chunk in stream:
                 if chunk.usage:
                     usage = {
                         "prompt_tokens": chunk.usage.prompt_tokens,
