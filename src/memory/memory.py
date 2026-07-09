@@ -143,10 +143,32 @@ You have a persistent, file-based memory system at `{memory_dir}`.
 - **reference**: Pointers to external resources
 
 ## How to Save Memories
-Use the write_file tool to create a memory file with YAML frontmatter:
-...
+Use the write_file tool to create a memory file with YAML frontmatter.
+
+**Format:**
+```
+---
+name: Short descriptive name
+description: One-line summary of what this memory contains
+type: user | feedback | project | reference
+---
+
+The full content of the memory goes here.
+```
+
+**Example:**
+```
+---
+name: 用户偏好语言
+description: 用户偏好使用中文回复
+type: user
+---
+
+用户希望所有对话使用简体中文进行交流。
+```
+
 Save to: `{memory_dir}/`
-Filename format: `{{type}}_{{slugified_name}}.md`
+Filename: `{{type}}_{{slugified_name}}.md` (e.g. `user_preferences.md`)
 
 ## What NOT to Save
 - Code patterns or architecture (read the code instead)

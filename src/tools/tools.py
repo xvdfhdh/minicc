@@ -519,6 +519,15 @@ def _write_file(inp: dict) -> str:
         path = Path(inp["file_path"])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(inp["content"], encoding="utf-8")
+
+        # 如果写入的是 memory 目录，自动刷新索引
+        from src.memory.memory import get_memory_dir, _update_memory_index
+        try:
+            if path.parent == get_memory_dir() and path.suffix == ".md" and path.name != "MEMORY.md":
+                _update_memory_index()
+        except Exception:
+            pass
+
         lines = inp["content"].split("\n")
         line_count = len(lines)
         preview = "\n".join(f"{i+1:4d} | {l}" for i, l in enumerate(lines[:30]))
@@ -539,7 +548,7 @@ def _grep_search(inp: dict) -> str:
         if include:
             args.append(f"--include={include}")
         args.extend(["--", pattern, path])
-        result = subprocess.run(args, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace", timeout=10)
         if result.returncode == 1:
             return "No matches found."
         if result.returncode != 0:
@@ -558,7 +567,7 @@ def _run_shell(inp: dict) -> str:
     try:
         timeout = inp.get("timeout", 30)
         result = subprocess.run(
-            inp["command"], shell=True, capture_output=True, text=True, timeout=timeout
+            inp["command"], shell=True, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout
         )
         if result.returncode != 0:
             stderr = f"\nStderr: {result.stderr}" if result.stderr else ""
