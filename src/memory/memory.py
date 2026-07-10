@@ -104,7 +104,7 @@ def save_memory(name:str,description:str,type:str,content:str)->str:
         {"name":name,"description":description,"type":type},
         content
     )
-    (d/filename).write_text(text)
+    (d/filename).write_text(text, encoding="utf-8")
     _update_memory_index()
     return filename
 

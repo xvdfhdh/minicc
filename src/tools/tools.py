@@ -85,6 +85,32 @@ tool_definitions: list[ToolDef] = [
         },
     },
     {
+        "name": "save_memory",
+        "description": "Save a persistent memory to the memory directory (~/.minicc/memory/). Use this to remember user preferences, project context, feedback, or reference information. Memories are stored as YAML-frontmatter markdown files.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Short descriptive name for the memory (e.g. '用户偏好语言')"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Memory type: 'user' (preferences/knowledge), 'feedback' (corrections), 'project' (goals/decisions), 'reference' (pointers)"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "One-line summary of what this memory contains"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The full content of the memory"
+                }
+            },
+            "required": ["name", "type", "description", "content"],
+        },
+    },
+    {
         "name": "edit_file",
         "description": "Edit a file by replacing a unique occurrence of old_string with new_string. The old_string must match exactly one location in the file.",
         "input_schema": {
@@ -385,6 +411,7 @@ async def execute_tool(
         "web_fetch": web_fetch,
         "tool_search": tool_search,
         "skill": _execute_skill_tool,
+        "save_memory": _save_memory_tool,
     }
 
     handler = handlers.get(name)
@@ -451,6 +478,21 @@ def _read_file(inp: dict) -> str:
 
 
 # 编辑文件：在文件中找到唯一匹配的 old_string 替换为 new_string
+def _save_memory_tool(inp: dict) -> str:
+    """将 save_memory 工具调用桥接到 memory.save_memory()"""
+    try:
+        from src.memory.memory import save_memory
+        filename = save_memory(
+            name=inp["name"],
+            description=inp["description"],
+            type=inp["type"],
+            content=inp["content"],
+        )
+        return f"Memory saved: {filename}"
+    except Exception as e:
+        return f"Error saving memory: {e}"
+
+
 def _edit_file(inp: dict) -> str:
     try:
         path = Path(inp["file_path"])
@@ -466,6 +508,14 @@ def _edit_file(inp: dict) -> str:
 
         new_content = content.replace(actual, inp["new_string"], 1)
         path.write_text(new_content, encoding="utf-8")
+
+        # 如果编辑的是 memory 目录，自动刷新索引
+        try:
+            from src.memory.memory import get_memory_dir, _update_memory_index
+            if path.parent == get_memory_dir() and path.suffix == ".md" and path.name != "MEMORY.md":
+                _update_memory_index()
+        except Exception:
+            pass
 
         diff = _generate_diff(content, actual, inp["new_string"])
         quote_note = " (match via quote normalization)" if actual != inp["old_string"] else ""
