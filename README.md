@@ -24,7 +24,7 @@
 ### 从 wheel 包安装
 
 ```bash
-pip install minicc-0.1.0-py3-none-any.whl
+pip install zahxi-minicc
 ```
 
 ### 从源码安装（开发模式）
