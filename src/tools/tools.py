@@ -174,7 +174,7 @@ tool_definitions: list[ToolDef] = [
     },
     {
         "name": "skill",
-        "description": "Invoke a registered skill by name. Skills are user-defined prompt templates stored in ~/.claude/skills/",
+        "description": "Invoke a registered skill by name. Skills are user-defined prompt templates stored in ~/.minicc/skills/",
         "input_schema": {
             "type": "object",
             "properties": {

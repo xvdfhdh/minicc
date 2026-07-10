@@ -43,8 +43,8 @@ def discover_skills()->list[SkillDefinition]:
 
     skills: dict[str, SkillDefinition] = {}
 
-    _load_skills_from_dir(Path.home() / ".claude" / "skills", "user", skills)
-    _load_skills_from_dir(Path.cwd() / ".claude" / "skills", "project", skills)
+    _load_skills_from_dir(Path.home() / ".minicc" / "skills", "user", skills)
+    _load_skills_from_dir(Path.cwd() / ".minicc" / "skills", "project", skills)
 
     _cached_skills = list(skills.values())
     return _cached_skills

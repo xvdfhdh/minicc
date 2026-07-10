@@ -174,9 +174,9 @@ def resolve_includes(
     return INCLUDE_REGEX.sub(_replace, content)
 
 
-# 加载 .claude/rules/ 目录下的所有 .md 规则文件
+# 加载 .minicc/rules/ 目录下的所有 .md 规则文件
 def load_rules_dir(dir: str) -> str:
-    rules_dir = Path(dir) / ".claude" / "rules"
+    rules_dir = Path(dir) / ".minicc" / "rules"
     if not rules_dir.exists():
         return ""
 

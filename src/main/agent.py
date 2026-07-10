@@ -283,7 +283,7 @@ class Agent:
         self._plan_approval_fn = fn
 
     def _generate_plan_file_path(self) -> str:
-        d = Path.home() / ".claude" / "plans"
+        d = Path.home() / ".minicc" / "plans"
         d.mkdir(parents=True, exist_ok=True)
         return str(d / f"plan-{self.session_id}.md")
 
