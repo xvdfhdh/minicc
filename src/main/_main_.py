@@ -126,7 +126,8 @@ def main() -> None:
     resolved_api_key, resolved_use_openai = _resolve_api_config(args)
 
     agent = Agent(permission_mode=permission_mode, model=model, thinking=args.thinking,
-                  max_cost_usd=args.max_cost, max_turns=args.max_turns, api_key=resolved_api_key, use_openai=resolved_use_openai)
+                  max_cost_usd=args.max_cost, max_turns=args.max_turns, api_key=resolved_api_key, use_openai=resolved_use_openai,
+                  openai_base_url=args.api_base)
 
     # 注册 plan 模式审批回调
     agent.set_plan_approval_fn(plan_approval)

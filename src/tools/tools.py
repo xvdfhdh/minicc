@@ -587,29 +587,53 @@ def _write_file(inp: dict) -> str:
         return f"Error writing file: {e}"
 
 
-# 使用系统 grep 递归搜索（最多返回 100 条匹配）
+# 使用 Python 实现递归文本搜索（替代系统 grep，跨平台兼容）
 def _grep_search(inp: dict) -> str:
     pattern = inp["pattern"]
     path = inp.get("file_path") or "."
     include = inp.get("include")
 
     try:
-        args = ["grep", "--line-number", "--color=never", "-r"]
-        if include:
-            args.append(f"--include={include}")
-        args.extend(["--", pattern, path])
-        result = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace", timeout=10)
-        if result.returncode == 1:
+        regex = re.compile(pattern)
+        base = Path(path)
+
+        if not base.exists():
+            return f"Error: Path not found: {path}"
+
+        # 收集待搜索的文件
+        if base.is_dir():
+            if include:
+                files = list(base.rglob(include))
+            else:
+                files = list(base.rglob("*"))
+        else:
+            files = [base]
+
+        matches: list[str] = []
+        MAX_MATCHES = 100
+        for f in files:
+            if not f.is_file():
+                continue
+            try:
+                content = f.read_text(encoding="utf-8", errors="replace")
+                for line_num, line in enumerate(content.splitlines(), 1):
+                    if regex.search(line):
+                        matches.append(f"{f}:{line_num}:{line}")
+                        if len(matches) >= MAX_MATCHES:
+                            break
+            except Exception:
+                continue
+            if len(matches) >= MAX_MATCHES:
+                break
+
+        if not matches:
             return "No matches found."
-        if result.returncode != 0:
-            return f"Error: {result.stderr}"
-        lines = [l for l in result.stdout.split("\n") if l]
-        output = "\n".join(lines[:100])
-        if len(lines) > 100:
-            output += f"\n... and {len(lines) - 100} more matches"
+        output = "\n".join(matches)
+        if len(matches) >= MAX_MATCHES:
+            output += f"\n... and more matches (truncated at {MAX_MATCHES})"
         return output
-    except Exception as e:
-        return f"Error: {e}"
+    except re.error as e:
+        return f"Error: Invalid regex pattern: {e}"
 
 
 # 执行 shell 命令（带超时），返回 stdout 或错误信息

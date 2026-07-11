@@ -167,6 +167,7 @@ class Agent:
         max_turns: int | None = None,
         api_key: str,
         use_openai: bool = False,
+        openai_base_url: str | None = None,
         custom_system_prompt: str | None = None,
         custom_tools: list[ToolDef] | None = None,
         is_sub_agent: bool = False,
@@ -196,7 +197,7 @@ class Agent:
         )
         self._openai_client = OpenAI(
             api_key=api_key,
-            base_url=os.environ.get("OPENAI_BASE_URL"),
+            base_url=openai_base_url or os.environ.get("OPENAI_BASE_URL"),
         )
 
         # --- 消息历史 ---
@@ -383,7 +384,8 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
         
         system_msg=self._openai_messages[0]
         last_user_msg=self._openai_messages[-1]
-        summary_resp = await self._openai_client.chat.completions.create(
+        summary_resp = await asyncio.to_thread(
+            self._openai_client.chat.completions.create,
             model=self.model,
             max_tokens=2048,
             messages=[
@@ -583,7 +585,13 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
                 early_task = early_executions.get(tu.id)
                 if early_task:
                     raw = await early_task  # 已完成或即将完成
-                    # ... 直接使用结果
+                    result = _persist_large_result(tu.name, raw)
+                    print_tool_result(tu.name, result)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tu.id,
+                        "content": result,
+                    })
                     continue
                 if self._aborted:
                     break
@@ -1014,6 +1022,8 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
 
     # 工具调用路由：plan 模式工具走自处理，普通工具委托给 tools.execute_tool
     async def _execute_tool_call(self, name: str, inp: dict) -> str:
+        if name in ("enter_plan_mode", "exit_plan_mode"):
+            return await self._execute_plan_mode_tool(name)
         if name == "agent":
             return await self._execute_agent_tool(inp)
         if name == "skill":
@@ -1024,7 +1034,7 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
         if name=="enter_plan_mode":
             if self.permission_mode=="plan":
                 return "Already in plan mode."
-            self._permission_mode="plan"
+            self.permission_mode="plan"
             self._plan_file_path=self._generate_plan_file_path()
             self._system_prompt=self._base_system_prompt + self._build_plan_mode_prompt()
             if self.use_openai and self._openai_messages:
