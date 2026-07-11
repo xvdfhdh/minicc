@@ -30,7 +30,7 @@ def print_welcome() -> None:
     "" ""\n""", style="bold white")
 
     title = Text("Mini Claude Code ", style="bold cyan")
-    title.append("v0.1.3", style="dim")
+    title.append("v0.1.4", style="dim")
 
     header = Text.assemble(rabbit, title)
     console.print(Panel(header, border_style="cyan", width=48))
