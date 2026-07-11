@@ -1052,7 +1052,7 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
                 return "Not in plan mode."
             plan_content = "(No plan file found)"
             if self._plan_file_path and Path(self._plan_file_path).exists():
-                plan_content = Path(self._plan_file_path).read_text()
+                plan_content = Path(self._plan_file_path).read_text(encoding="utf-8")
 
             if self._plan_approval_fn:
                 result = await self._plan_approval_fn(plan_content)

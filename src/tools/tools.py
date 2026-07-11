@@ -469,7 +469,7 @@ def _generate_diff(old_content: str, old_string: str, new_string: str) -> str:
 # 读取文件并返回带行号的文本
 def _read_file(inp: dict) -> str:
     try:
-        content = Path(inp["file_path"]).read_text()
+        content = Path(inp["file_path"]).read_text(encoding="utf-8")
         lines = content.split("\n")
         numbered = "\n".join([f"{i+1:4d}| {line}" for i, line in enumerate(lines)])
         return numbered
@@ -496,7 +496,7 @@ def _save_memory_tool(inp: dict) -> str:
 def _edit_file(inp: dict) -> str:
     try:
         path = Path(inp["file_path"])
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
 
         actual = _find_actual_string(content, inp["old_string"])
         if not actual:

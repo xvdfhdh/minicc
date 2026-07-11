@@ -28,7 +28,7 @@ def list_sessions() -> list[dict]:
     sessions = []
     for f in SESSION_DIR.glob("*.json"):
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
             sessions.append(data)
         except Exception:
             pass  # 跳过损坏的文件
@@ -41,6 +41,6 @@ def load_session(session_id: str) -> dict | None:
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
