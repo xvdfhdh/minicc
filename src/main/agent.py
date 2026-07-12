@@ -378,19 +378,54 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
             self._anthropic_messages.append(last_user_msg)
         self.last_input_token_count = 0
 
+    @staticmethod
+    def _strip_orphaned_tool_messages(messages: list[dict]) -> list[dict]:
+        """移除孤立的 tool 结果和 assistant tool_calls（缺少配对的消息）。"""
+        # 收集 assistant 中引用的所有 tool_call_id
+        tc_ids_from_assistant: set[str] = set()
+        for m in messages:
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                for tc in m["tool_calls"]:
+                    if isinstance(tc, dict):
+                        tc_ids_from_assistant.add(tc["id"])
+        # 收集 tool 消息中的 tool_call_id
+        tc_ids_from_tools: set[str] = set()
+        for m in messages:
+            if m.get("role") == "tool":
+                tc_ids_from_tools.add(m.get("tool_call_id", ""))
+        # 只有双方都存在的 id 才是配对的
+        paired_ids = tc_ids_from_assistant & tc_ids_from_tools
+
+        result: list[dict] = []
+        for m in messages:
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                tc_ids = {tc["id"] for tc in m["tool_calls"] if isinstance(tc, dict)}
+                if tc_ids.issubset(paired_ids):
+                    result.append(m)
+                # 否则跳过：孤立的 assistant tool_calls
+            elif m.get("role") == "tool":
+                if m.get("tool_call_id", "") in paired_ids:
+                    result.append(m)
+                # 否则跳过：孤立的 tool 结果
+            else:
+                result.append(m)
+        return result
+
     async def _compact_openai(self)->None:
         if len(self._openai_messages) <5:
             return
         
         system_msg=self._openai_messages[0]
         last_user_msg=self._openai_messages[-1]
+        # 构建 compact 切片并清理孤立的 tool_calls/tool 消息对
+        compact_msgs = self._strip_orphaned_tool_messages(list(self._openai_messages[1:-1]))
         summary_resp = await asyncio.to_thread(
             self._openai_client.chat.completions.create,
             model=self.model,
             max_tokens=2048,
             messages=[
                 {"role": "system", "content": "You are a conversation summarizer. Be concise but preserve important details."},
-                *self._openai_messages[1:-1],
+                *compact_msgs,
                 {"role": "user", "content": "Summarize the conversation so far..."},
             ],
         )
