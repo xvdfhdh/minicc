@@ -26,3 +26,8 @@ dist/
 build/
 
 docs/
+
+# Pytest / Coverage
+.coverage
+.pytest_cache/
+htmlcov/
