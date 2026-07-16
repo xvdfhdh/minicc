@@ -1,11 +1,11 @@
-"""CI workflow: run tests on push and pull requests."""
+# CI workflow: run tests on push and pull requests
 name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   test:
