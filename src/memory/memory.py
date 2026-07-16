@@ -116,11 +116,22 @@ def _update_memory_index()->None:
     _get_index_path().write_text("\n".join(lines))
 
 
+def _safe_read_text(path: Path) -> str:
+    """读取文件，尝试 UTF-8 → GBK → errors=replace，兼容旧版编码遗留。"""
+    raw = path.read_bytes()
+    for enc in ("utf-8", "gbk"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
 def load_memory_index()->str:
     index_path=_get_index_path()
     if not index_path.exists():
         return ""
-    content=index_path.read_text(encoding="utf-8")
+    content=_safe_read_text(index_path)
     lines=content.split("\n")
     if len(lines) > MAX_INDEX_LINES:
         content = "\n".join(lines[:MAX_INDEX_LINES]) + "\n\n[... truncated, too many memory entries ...]"
