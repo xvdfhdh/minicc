@@ -31,7 +31,8 @@ def list_sessions() -> list[dict]:
             data = json.loads(f.read_text(encoding="utf-8"))
             sessions.append(data)
         except Exception:
-            pass  # 跳过损坏的文件
+            from src.main.logger import logger
+            logger.warning("Skipping corrupted session file: {}", f, exc_info=True)
     return sessions
 
 

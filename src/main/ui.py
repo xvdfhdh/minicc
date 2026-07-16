@@ -23,14 +23,14 @@ def print_welcome() -> None:
     """打印带可爱白兔 ASCII art 的欢迎界面"""
     console.print()
 
-    # 可爱白兔 ASCII art（用 Text 对象避免 Rich markup 转义反斜杠）
+    # 白兔 ASCII art（用 Text 对象避免 Rich markup 转义反斜杠）
     rabbit = Text("""    /)  /)
    (˶• •˶)
    (  🥕 )
     "" ""\n""", style="bold white")
 
     title = Text("Mini Claude Code ", style="bold cyan")
-    title.append("v0.1.4", style="dim")
+    title.append("v0.2.0", style="dim")
 
     header = Text.assemble(rabbit, title)
     console.print(Panel(header, border_style="cyan", width=48))
@@ -65,6 +65,8 @@ def _build_help_text() -> Text:
     tips.append("     Toggle plan mode (read-only planning)\n", style="dim")
     tips.append("/memory", style="bold yellow")
     tips.append("   View saved memories\n", style="dim")
+    tips.append("/logs", style="bold yellow")
+    tips.append("      View recent debug logs\n", style="dim")
     tips.append("\nType ", style="dim")
     tips.append("exit", style="bold yellow")
     tips.append(" or ", style="dim")

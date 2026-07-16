@@ -217,6 +217,12 @@ async def run_repl(agent: Agent) -> None:
             print_help()
             continue
 
+        if inp == "/logs":
+            from src.main.logger import get_recent_logs
+            logs = get_recent_logs(50)
+            print_info(f"Recent logs:\n{logs}")
+            continue
+
                 # 用户自定义技能调用：/skill-name args
         if inp.startswith("/"):
             space_idx = inp.find(" ")

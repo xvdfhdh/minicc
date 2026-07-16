@@ -440,7 +440,8 @@ async def execute_tool(
             try:
                 read_file_state[abs_path] = os.stat(abs_path).st_mtime * 1000
             except OSError:
-                pass
+                from src.main.logger import logger
+                logger.debug("os.stat failed for {}", abs_path, exc_info=True)
 
     return _truncate_result(result)
 
@@ -515,7 +516,8 @@ def _edit_file(inp: dict) -> str:
             if path.parent == get_memory_dir() and path.suffix == ".md" and path.name != "MEMORY.md":
                 _update_memory_index()
         except Exception:
-            pass
+            from src.main.logger import logger
+            logger.warning("Failed to update memory index after edit_file", exc_info=True)
 
         diff = _generate_diff(content, actual, inp["new_string"])
         quote_note = " (match via quote normalization)" if actual != inp["old_string"] else ""
@@ -576,7 +578,8 @@ def _write_file(inp: dict) -> str:
             if path.parent == get_memory_dir() and path.suffix == ".md" and path.name != "MEMORY.md":
                 _update_memory_index()
         except Exception:
-            pass
+            from src.main.logger import logger
+            logger.warning("Failed to update memory index after write_file", exc_info=True)
 
         lines = inp["content"].split("\n")
         line_count = len(lines)

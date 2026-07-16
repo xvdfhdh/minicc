@@ -845,7 +845,8 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
                 "openaiMessages": self._openai_messages if self.use_openai else None,
             })
         except Exception:
-            pass
+            from src.main.logger import logger
+            logger.warning("auto_save failed for session {}", self.session_id, exc_info=True)
 
     def _get_message_count(self) -> int:
         """返回当前会话消息数量（排除 system 消息）"""
@@ -936,7 +937,8 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
                                         "name": tracked["name"], "input": inp
                                     })
                                 except json.JSONDecodeError:
-                                    pass
+                                    from src.main.logger import logger
+                                    logger.debug("Failed to parse streaming tool-use JSON for {}", tracked.get("name"), exc_info=True)
 
                 final_message = await stream.get_final_message()
 

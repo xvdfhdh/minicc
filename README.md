@@ -42,6 +42,13 @@ pip install -e .
 - openai >= 1.0
 - rich >= 13.0
 - requests >= 2.28
+- loguru >= 0.7
+
+### 开发依赖
+
+```bash
+pip install -e ".[dev]"  # 安装测试工具 (pytest, pytest-asyncio, pytest-cov)
+```
 
 ## 快速开始
 
@@ -108,6 +115,7 @@ mini-claude -m gpt-4o "用 Python 写一个快速排序"
 | `/compact` | 压缩对话上下文（节省 Token） |
 | `/plan` | 切换计划模式 |
 | `/memory` | 查看已保存的记忆 |
+| `/logs` | 查看最近调试日志 |
 | `exit` / `quit` | 退出 |
 | `Ctrl+C` | 中断当前响应（连按两次强制退出） |
 
@@ -167,6 +175,24 @@ type: user
 
 支持四种记忆类型：`user`、`feedback`、`project`、`reference`。写入后自动更新索引，下次对话自动语义检索相关记忆注入上下文。
 
+## 日志系统
+
+所有异常和关键操作自动记录到 `~/.minicc/logs/minicc.log`，按日轮转，保留 7 天。`/logs` 命令可查看最近 50 行日志，方便问题诊断。
+
+## 开发
+
+### 运行测试
+
+```bash
+pytest                    # 运行全部测试
+pytest -v                 # 详细输出
+pytest --cov --cov-report=term-missing  # 覆盖率报告
+```
+
+### CI/CD
+
+PR 提交后 GitHub Actions 自动在 3 个 Python 版本 (3.10/3.11/3.12) × 2 操作系统 (Ubuntu/Windows) 矩阵上运行全部测试。
+
 ## CLI 参数
 
 ```
@@ -198,7 +224,8 @@ minicc/
 │   │   ├── ui.py              # 终端 UI（欢迎界面、帮助、工具输出）
 │   │   ├── config_wizard.py   # 首次配置向导
 │   │   ├── session.py         # 会话持久化
-│   │   └── subagent.py        # 子代理实现
+│   │   ├── subagent.py        # 子代理实现
+│   │   └── logger.py          # 日志系统
 │   ├── memory/
 │   │   ├── memory.py          # 记忆存取、语义检索、索引
 │   │   └── frontmatter.py     # YAML frontmatter 解析
@@ -209,6 +236,17 @@ minicc/
 │   ├── tools/
 │   │   └── tools.py           # 所有工具实现
 │   └── mini_claude.py         # 包入口
+├── tests/                     # 测试套件
+│   ├── conftest.py
+│   ├── test_agent.py
+│   ├── test_frontmatter.py
+│   ├── test_logger.py
+│   ├── test_memory.py
+│   ├── test_prompt.py
+│   ├── test_session.py
+│   ├── test_skills.py
+│   └── test_tools.py
+├── .github/workflows/test.yml  # CI 配置
 ├── pyproject.toml
 ├── dist/                      # 构建产物
 └── README.md

@@ -192,7 +192,8 @@ async def _mark_settled(handle: MemoryPrefetch) -> None:
     try:
         await handle.promise
     except Exception:
-        pass
+        from src.main.logger import logger
+        logger.debug("Memory prefetch task failed", exc_info=True)
     handle.settled = True
 
 

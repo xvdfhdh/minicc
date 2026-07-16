@@ -71,7 +71,8 @@ def load_claude_md() -> str:
                 content = resolve_includes(content, str(d))
                 parts.insert(0, content)
             except Exception:
-                pass
+                from src.main.logger import logger
+                logger.debug("Failed to read CLAUDE.md: {}", f, exc_info=True)
         parent = d.parent
         if parent == d:
             break
@@ -188,6 +189,7 @@ def load_rules_dir(dir: str) -> str:
             content = resolve_includes(content, str(rules_dir))
             parts.append(f"<!-- rule: {file.name} -->{content}")
         except Exception:
-            pass
+            from src.main.logger import logger
+            logger.debug("Failed to read rule file: {}", file, exc_info=True)
 
     return "\n\n## Rules" + "\n\n".join(parts) if parts else ""
