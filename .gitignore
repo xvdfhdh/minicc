@@ -25,6 +25,4 @@ dist/
 *.egg-info/
 build/
 
-pyproject.toml
-
 docs/
