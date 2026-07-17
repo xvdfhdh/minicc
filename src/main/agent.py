@@ -1,3 +1,4 @@
+from src.main.subagent import get_sub_agent_config
 from __future__ import annotations
 from anthropic import AsyncAnthropic
 from openai import OpenAI
@@ -12,6 +13,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from src.memory.memory import *
+import src.mcp_server.mcp
+from src.mcp_server.mcp import McpManager
 
 # 将内部工具定义转换为 OpenAI function calling 格式
 def _to_openai_tools(tools: list[ToolDef]) -> list[dict]:
@@ -26,6 +29,110 @@ def _to_openai_tools(tools: list[ToolDef]) -> list[dict]:
         }
         for t in tools
     ]
+
+
+def _model_supports_thinking(model: str) -> bool:
+    """判断模型是否支持 extended thinking"""
+    return _get_model_capability(model, "thinking")
+
+
+def _model_supports_adaptive_thinking(model: str) -> bool:
+    """判断模型是否支持自适应 thinking budget"""
+    return _get_model_capability(model, "adaptive_thinking")
+
+
+_MODEL_CAPS: dict[str, set[str]] = {
+    # ── Anthropic ──
+    "claude-fable-5":       {"adaptive_thinking"},
+    "claude-mythos-5":      {"adaptive_thinking"},
+    "claude-opus-4.8":      {"adaptive_thinking"},
+    "claude-opus-4.7":      {"adaptive_thinking"},
+    "claude-opus-4.6":      {"thinking", "adaptive_thinking"},
+    "claude-sonnet-4.6":    {"thinking", "adaptive_thinking"},
+    "claude-opus-4":        {"thinking", "adaptive_thinking"},
+    "claude-sonnet-4":      {"thinking", "adaptive_thinking"},
+    "claude-3-7-sonnet":    {"thinking", "adaptive_thinking"},
+    "claude-3-5-sonnet":    {"thinking"},
+    "claude-3-opus":        {"thinking"},
+    "claude-3-haiku":       set(),
+    # ── OpenAI ──
+    "gpt-5.6":              {"adaptive_thinking"},
+    "gpt-5":                {"adaptive_thinking"},
+    "o4":                   {"adaptive_thinking"},
+    "o3":                   {"adaptive_thinking"},
+    "o1":                   {"adaptive_thinking"},
+    # ── Google ──
+    "gemini-3.5":           {"adaptive_thinking"},
+    "gemini-3":             {"adaptive_thinking"},
+    "gemini-2.5":           {"adaptive_thinking"},
+    # ── 阿里 Qwen ──
+    "qwen3.7":              {"thinking", "adaptive_thinking"},
+    "qwen3":                {"thinking", "adaptive_thinking"},
+    "qwq":                  {"thinking", "adaptive_thinking"},
+    # ── DeepSeek ──
+    "deepseek-v4":          {"thinking", "adaptive_thinking"},
+    "deepseek-r1":          {"thinking"},
+    "deepseek-v3":          {"thinking"},
+    # ── 智谱 GLM ──
+    "glm-5":                {"thinking", "adaptive_thinking"},
+    # ── 月之暗面 Kimi ──
+    "kimi-k2":              {"thinking"},
+    # 未注册模型默认不支持任何能力
+}
+
+
+def _get_model_capability(model: str, cap: str) -> bool:
+    """查询模型能力：先精确匹配 model id，再按前缀回退"""
+    m = model.lower()
+    for prefix, caps in _MODEL_CAPS.items():
+        if m == prefix:
+            return cap in caps
+        # "claude-opus-4.6-20250715" → 匹配前缀 "claude-opus-4.6"
+        # "gemini-3.5-flash"        → 匹配前缀 "gemini-3.5"
+        if m.startswith(prefix) and len(m) > len(prefix) and m[len(prefix)] in ("-", "."):
+            return cap in caps
+    return False
+
+
+def _get_max_output_tokens(model: str) -> int:
+    """按模型返回最大输出 token 数，用于 thinking budget 计算"""
+    m = model.lower()
+    # Anthropic 新模型（仅自适应模式，无需手动预算）
+    if m.startswith("claude-fable-5") or m.startswith("claude-mythos-5"):
+        return 32768
+    if m.startswith("claude-opus-4.8") or m.startswith("claude-opus-4.7"):
+        return 32768
+    if m.startswith("claude-opus-4"):
+        return 32768
+    if m.startswith("claude-sonnet-4"):
+        return 16384
+    if m.startswith("claude-3-7-sonnet"):
+        return 16384
+    if m.startswith("claude-3-5"):
+        return 8192
+    if m.startswith("claude-3"):
+        return 4096
+    # OpenAI / Google / 其他
+    if m.startswith(("gpt-5", "gpt-4", "o4", "o3", "o1")):
+        return 16384
+    if m.startswith("gemini-3"):
+        return 16384
+    if m.startswith("gemini-2.5"):
+        return 8192
+    # 默认保守值
+    return 8192
+
+
+def format_memories_for_injection(memories: list[dict]) -> str:
+    """将召回的记忆列表格式化为注入提示文本"""
+    if not memories:
+        return ""
+    blocks = []
+    for m in memories:
+        header = m.get("header", "")
+        content = m.get("content", "")
+        blocks.append(f"{header}\n{content}")
+    return "\n\n---\n\n".join(blocks)
 
 
 # 带指数退避重试的异步执行器，处理 429/503/529 等可重试错误
@@ -171,6 +278,7 @@ class Agent:
         custom_system_prompt: str | None = None,
         custom_tools: list[ToolDef] | None = None,
         is_sub_agent: bool = False,
+        
     ):
         # --- 基本配置 ---
         self.model = model
@@ -183,6 +291,10 @@ class Agent:
         self.use_openai = use_openai
         self.is_sub_agent = is_sub_agent
         self.tools = custom_tools or tool_definitions
+
+        # --- MCP ---
+        self.mcp_manager = McpManager()
+        self._mcp_initialized = False
 
         # --- 提示词 ---
         self._base_system_prompt = custom_system_prompt or build_system_prompt()
@@ -236,6 +348,8 @@ class Agent:
         # --- 会话 ---
         self.session_id = str(uuid.uuid4())
         self.session_start_time = datetime.now(timezone.utc).isoformat()
+
+        # --- MCP 管理器 ---
 
         # --- Thinking 模式 ---
         self._thinking_mode = self._resolve_thinking_mode()
@@ -810,6 +924,15 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
 
     # 公开入口：根据 use_openai 标志分发到对应后端
     async def chat(self, user_message: str) -> None:
+        if not self._mcp_initialized and not self.is_sub_agent:
+            self._mcp_initialized = True
+            try:
+                await self.mcp_manager.load_and_connect()
+                mcp_defs = self.mcp_manager.get_tool_definitions()
+                if mcp_defs:
+                    self.tools.extend(mcp_defs)
+            except Exception as err:
+                print(f"[mcp] Init failed: {err}")
 
         if not hasattr(self, "_confirmed_paths"):
             self._confirmed_paths: set[str] = set()
@@ -1065,6 +1188,10 @@ Do NOT ask the user to approve — exit_plan_mode handles that."""
             return await self._execute_agent_tool(inp)
         if name == "skill":
             return await self._execute_skill_tool(inp)
+        
+        if self.mcp_manager.is_mcp_tool(name):
+            return await self.mcp_manager.call_tool(name, input)
+
         return await execute_tool(name, inp)
 
     async def _execute_plan_mode_tool(self,name:str)->str:

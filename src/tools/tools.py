@@ -255,7 +255,7 @@ def is_dangerous(command: str) -> bool:
     return any(p.search(command) for p in DANGEROUS_PATTERNS)
 
 
-class ToolDef(TypedDict):
+class ToolDef(TypedDict, total=False):
     name: str
     description: str
     input_schema: dict[str, Any]

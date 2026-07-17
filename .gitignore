@@ -11,6 +11,7 @@ venv/
 # IDE
 .vscode/
 .idea/
+.hyperion/
 
 # OS
 .DS_Store
